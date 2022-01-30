@@ -30,8 +30,8 @@ impl TUNDevice {
 
             let mut req: ifreq = std::mem::zeroed();
 
-            // Create and enable the device.
-            req.ifru.flags |= IFF_TUN | IFF_UP | IFF_RUNNING;
+            // Create the device.
+            req.ifru.flags |= IFF_TUN;
             tunsetiff(tun.0, &mut req as *mut _ as *mut _)?;
 
             let sock = match socket(AF_INET, SOCK_DGRAM, 0) {
@@ -39,10 +39,19 @@ impl TUNDevice {
                 _ => return Err(DeviceError::IOError(std::io::Error::last_os_error())),
             };
 
+            // Enable the device.
+            siocgifflags(sock, &req)
+                .map_err(|_| std::io::Error::last_os_error())?;
+
+            req.ifru.flags |= IFF_UP | IFF_RUNNING;
+            siocsifflags(sock, &req)
+                .map_err(|_| std::io::Error::last_os_error())?;
+
+            // Set address.
             let ip = match cfg.address {
                 std::net::IpAddr::V4(ip) => ip,
                 std::net::IpAddr::V6(_) => return Err(DeviceError::UnexpectedError(
-                format!("only v4 ip addresses are currently supported")
+                    format!("only v4 ip addresses are currently supported")
                 )),
             };
 
@@ -55,11 +64,33 @@ impl TUNDevice {
                 sin_zero: std::mem::zeroed(),
             };
 
-            // Set address.
             let serveraddr_ptr = &servaddr as *const libc::sockaddr_in as *const libc::sockaddr;
             req.ifru.addr = *serveraddr_ptr;
 
             siocsifaddr(sock, &req)
+                .map_err(|_| std::io::Error::last_os_error())?;
+
+            // Set netmask.
+            let netmask_ip = match cfg.netmask {
+                std::net::IpAddr::V4(mask) => mask,
+                std::net::IpAddr::V6(_) => return Err(DeviceError::UnexpectedError(
+                    format!("only v4 ip addresses are currently supported")
+                )),
+            };
+
+            let netmaskaddr = libc::sockaddr_in {
+                sin_family: AF_INET as u16,
+                sin_port: 0,
+                sin_addr: libc::in_addr {
+                    s_addr: u32::from_be_bytes(netmask_ip.octets()).to_be()
+                },
+                sin_zero: std::mem::zeroed(),
+            };
+
+            let netmaskaddr_ptr = &netmaskaddr as *const libc::sockaddr_in as *const libc::sockaddr;
+            req.ifru.netmask = *netmaskaddr_ptr;
+
+            siocsifnetmask(sock, &req)
                 .map_err(|_| std::io::Error::last_os_error())?;
 
             let _guard = runtime.enter();

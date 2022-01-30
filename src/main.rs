@@ -65,7 +65,8 @@ fn main() {
                 "mode": "TUN",
                 "buffer_size": 1000,
                 "tun_configuration": {
-                    "address": "10.0.0.3"
+                    "address": "10.0.0.3",
+                    "netmask": "255.255.255.0"
                 }
             }
         }

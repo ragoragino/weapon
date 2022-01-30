@@ -22,6 +22,7 @@ pub const IFF_RUNNING: c_short = 0x40;
 pub const SIOCGIFFLAGS: c_ulong = 0x8913;
 pub const SIOCSIFFLAGS: c_ulong = 0x8914;
 pub const SIOCSIFADDR: c_ulong = 0x8916;
+pub const SIOCSIFNETMASK: c_ulong = 0x891c;
 
 pub const IFF_TUN: c_short = 0x0001;
 pub const IFF_TAP: c_short = 0x0002;
@@ -97,3 +98,4 @@ ioctl_write_ptr!(tunsetiff, TUN_IOC_MAGIC, TUN_IOC_SET_IFF, u32);
 ioctl_write_ptr_bad!(siocgifflags, SIOCGIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifflags, SIOCSIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifaddr, SIOCSIFADDR, ifreq);
+ioctl_write_ptr_bad!(siocsifnetmask, SIOCSIFNETMASK, ifreq);
