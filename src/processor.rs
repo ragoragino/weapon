@@ -21,13 +21,14 @@ pub struct Processor {
 
 impl Processor {
     pub fn new(runtime: tokio::runtime::Handle) -> Result<Self, ProcessorError> {
-        Ok(Processor{
-            runtime: runtime,
-        })
+        Ok(Processor { runtime: runtime })
     }
 
-    pub fn start(&self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>, 
-        mut cfg: ProcessorConfiguration) -> Result<(), ProcessorError>  {
+    pub fn start(
+        &self,
+        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+        mut cfg: ProcessorConfiguration,
+    ) -> Result<(), ProcessorError> {
         let runtime = self.runtime.clone();
 
         self.runtime.spawn(async move {

@@ -1,19 +1,9 @@
-use libc::{
-    socket,
-    O_RDWR,
-    AF_INET,
-    SOCK_DGRAM,
-};
+use libc::{socket, AF_INET, O_RDWR, SOCK_DGRAM};
 use tokio::io::unix::AsyncFd;
 
-use crate::platform::linux::{
-    fd::*,
-    sys::*,
-};
+use crate::platform::linux::{fd::*, sys::*};
 use crate::platform::{
-    error::DeviceError,
-    config::TUNDeviceConfiguration,
-    config::TAPDeviceConfiguration,
+    config::TAPDeviceConfiguration, config::TUNDeviceConfiguration, error::DeviceError,
 };
 
 pub struct TUNDevice {
@@ -21,9 +11,12 @@ pub struct TUNDevice {
 }
 
 impl TUNDevice {
-    pub fn new(cfg: TUNDeviceConfiguration, runtime: tokio::runtime::Handle) -> Result<Self, DeviceError> {
+    pub fn new(
+        cfg: TUNDeviceConfiguration,
+        runtime: tokio::runtime::Handle,
+    ) -> Result<Self, DeviceError> {
         unsafe {
-            let tun =  Fd::new(libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR))
+            let tun = Fd::new(libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR))
                 .map_err(|_| std::io::Error::last_os_error())?;
 
             tun.set_nonblock()?;
@@ -40,26 +33,26 @@ impl TUNDevice {
             };
 
             // Enable the device.
-            siocgifflags(sock, &req)
-                .map_err(|_| std::io::Error::last_os_error())?;
+            siocgifflags(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
             req.ifru.flags |= IFF_UP | IFF_RUNNING;
-            siocsifflags(sock, &req)
-                .map_err(|_| std::io::Error::last_os_error())?;
+            siocsifflags(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
             // Set address.
             let ip = match cfg.address {
                 std::net::IpAddr::V4(ip) => ip,
-                std::net::IpAddr::V6(_) => return Err(DeviceError::UnexpectedError(
-                    format!("only v4 ip addresses are currently supported")
-                )),
+                std::net::IpAddr::V6(_) => {
+                    return Err(DeviceError::UnexpectedError(format!(
+                        "only v4 ip addresses are currently supported"
+                    )))
+                }
             };
 
             let servaddr = libc::sockaddr_in {
                 sin_family: AF_INET as u16,
                 sin_port: 0,
                 sin_addr: libc::in_addr {
-                    s_addr: u32::from_be_bytes(ip.octets()).to_be()
+                    s_addr: u32::from_be_bytes(ip.octets()).to_be(),
                 },
                 sin_zero: std::mem::zeroed(),
             };
@@ -67,22 +60,23 @@ impl TUNDevice {
             let serveraddr_ptr = &servaddr as *const libc::sockaddr_in as *const libc::sockaddr;
             req.ifru.addr = *serveraddr_ptr;
 
-            siocsifaddr(sock, &req)
-                .map_err(|_| std::io::Error::last_os_error())?;
+            siocsifaddr(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
             // Set netmask.
             let netmask_ip = match cfg.netmask {
                 std::net::IpAddr::V4(mask) => mask,
-                std::net::IpAddr::V6(_) => return Err(DeviceError::UnexpectedError(
-                    format!("only v4 ip addresses are currently supported")
-                )),
+                std::net::IpAddr::V6(_) => {
+                    return Err(DeviceError::UnexpectedError(format!(
+                        "only v4 ip addresses are currently supported"
+                    )))
+                }
             };
 
             let netmaskaddr = libc::sockaddr_in {
                 sin_family: AF_INET as u16,
                 sin_port: 0,
                 sin_addr: libc::in_addr {
-                    s_addr: u32::from_be_bytes(netmask_ip.octets()).to_be()
+                    s_addr: u32::from_be_bytes(netmask_ip.octets()).to_be(),
                 },
                 sin_zero: std::mem::zeroed(),
             };
@@ -90,8 +84,7 @@ impl TUNDevice {
             let netmaskaddr_ptr = &netmaskaddr as *const libc::sockaddr_in as *const libc::sockaddr;
             req.ifru.netmask = *netmaskaddr_ptr;
 
-            siocsifnetmask(sock, &req)
-                .map_err(|_| std::io::Error::last_os_error())?;
+            siocsifnetmask(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
             let _guard = runtime.enter();
             Ok(Self {
@@ -105,27 +98,23 @@ impl TUNDevice {
             let mut guard = self.inner.readable().await?;
 
             match guard.try_io(|inner| inner.get_ref().read(buf)) {
-                Ok(result) => {
-                    match result {
-                        Ok(size) => return Ok(size),
-                        Err(err) => return Err(DeviceError::IOError(err)),
-                    }
+                Ok(result) => match result {
+                    Ok(size) => return Ok(size),
+                    Err(err) => return Err(DeviceError::IOError(err)),
                 },
                 Err(_would_block) => continue,
             }
         }
     }
 
-    pub async fn write(&self, buf: &mut [u8]) -> Result<usize, DeviceError>  {
+    pub async fn write(&self, buf: &mut [u8]) -> Result<usize, DeviceError> {
         loop {
             let mut guard = self.inner.writable().await?;
 
             match guard.try_io(|inner| inner.get_ref().write(buf)) {
-                Ok(result) => {
-                    match result {
-                        Ok(size) => return Ok(size),
-                        Err(err) => return Err(DeviceError::IOError(err)),
-                    }
+                Ok(result) => match result {
+                    Ok(size) => return Ok(size),
+                    Err(err) => return Err(DeviceError::IOError(err)),
                 },
                 Err(_would_block) => continue,
             }
@@ -134,12 +123,10 @@ impl TUNDevice {
 }
 
 // TODO
-pub struct TAPDevice {
-    
-}
+pub struct TAPDevice {}
 
 impl TAPDevice {
     pub fn new(cfg: TAPDeviceConfiguration) -> Result<Self, DeviceError> {
-        Ok(TAPDevice{})
+        Ok(TAPDevice {})
     }
 }

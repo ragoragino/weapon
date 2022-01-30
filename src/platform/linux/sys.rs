@@ -1,18 +1,6 @@
-use nix::{
-    ioctl_write_ptr,
-    ioctl_write_ptr_bad,
-};
 use libc::sockaddr;
-use libc::{
-    c_char, 
-    c_int, 
-    c_short, 
-    c_uchar,
-    c_uint, 
-    c_ulong, 
-    c_ushort, 
-    c_void,
-};
+use libc::{c_char, c_int, c_short, c_uchar, c_uint, c_ulong, c_ushort, c_void};
+use nix::{ioctl_write_ptr, ioctl_write_ptr_bad};
 
 pub const IFNAMSIZ: usize = 16;
 

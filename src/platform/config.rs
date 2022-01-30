@@ -1,4 +1,4 @@
-use serde::{Deserialize};
+use serde::Deserialize;
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub struct TUNDeviceConfiguration {
@@ -7,6 +7,4 @@ pub struct TUNDeviceConfiguration {
 }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
-pub struct TAPDeviceConfiguration {
-
-}
+pub struct TAPDeviceConfiguration {}

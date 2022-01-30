@@ -1,18 +1,10 @@
-use serde::{Deserialize};
-use tokio;
-use log::{
-    error,
-    debug,
-};
+use log::{debug, error};
+use serde::Deserialize;
 use std::sync::Arc;
+use tokio;
 
 use crate::payload::*;
-use crate::platform::{
-    error::*,
-    config::*,
-    TAPDevice,
-    TUNDevice,
-};
+use crate::platform::{config::*, error::*, TAPDevice, TUNDevice};
 
 const MAX_DATAGRAM_SIZE: usize = 65535;
 const MAX_MTU_SIZE: usize = 1500;
@@ -27,7 +19,7 @@ pub enum TunnelMode {
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub enum TransportLayerProtocol {
     TCP,
-    UDP
+    UDP,
 }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
@@ -48,9 +40,9 @@ pub enum LanDeviceMode {
 pub struct LanConfiguration {
     pub mode: LanDeviceMode,
     pub buffer_size: usize,
-    #[serde(rename = "tun_configuration")] 
+    #[serde(rename = "tun_configuration")]
     pub tun_cfg: Option<TUNDeviceConfiguration>,
-    #[serde(rename = "tap_configuration")] 
+    #[serde(rename = "tap_configuration")]
     pub tap_cfg: Option<TAPDeviceConfiguration>,
 }
 
@@ -63,8 +55,16 @@ pub enum ConnectorError {
 }
 
 pub trait Connector {
-    fn start(&self, shutdown_rx: tokio::sync::mpsc::Receiver<()>) -> Result<(tokio::sync::mpsc::Sender<Payload>,
-        tokio::sync::mpsc::Receiver<Payload>), ConnectorError>;
+    fn start(
+        &self,
+        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+    ) -> Result<
+        (
+            tokio::sync::mpsc::Sender<Payload>,
+            tokio::sync::mpsc::Receiver<Payload>,
+        ),
+        ConnectorError,
+    >;
 }
 
 pub struct UDPConnector {
@@ -74,17 +74,19 @@ pub struct UDPConnector {
 }
 
 impl UDPConnector {
-    pub fn new(cfg: TunnelConfiguration, runtime: tokio::runtime::Handle) 
-        -> Result<Self, ConnectorError> {
+    pub fn new(
+        cfg: TunnelConfiguration,
+        runtime: tokio::runtime::Handle,
+    ) -> Result<Self, ConnectorError> {
         let std_sock = std::net::UdpSocket::bind(cfg.address)?;
         std_sock.set_nonblocking(true)?;
 
         let _guard = runtime.enter();
         let sock = Arc::new(tokio::net::UdpSocket::from_std(std_sock)?);
-        
+
         // TODO: Set socket timeouts and handle them.
 
-        Ok(UDPConnector{
+        Ok(UDPConnector {
             cfg: cfg,
             runtime: runtime,
             socket: sock,
@@ -93,11 +95,19 @@ impl UDPConnector {
 }
 
 impl Connector for UDPConnector {
-    fn start(&self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) -> Result<(tokio::sync::mpsc::Sender<Payload>,
-        tokio::sync::mpsc::Receiver<Payload>), ConnectorError> {
+    fn start(
+        &self,
+        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+    ) -> Result<
+        (
+            tokio::sync::mpsc::Sender<Payload>,
+            tokio::sync::mpsc::Receiver<Payload>,
+        ),
+        ConnectorError,
+    > {
         let (in_tx, in_rx) = tokio::sync::mpsc::channel::<Payload>(self.cfg.buffer_size);
         let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Payload>(self.cfg.buffer_size);
-        
+
         let socket = self.socket.clone();
         let runtime = self.runtime.clone();
 
@@ -158,15 +168,21 @@ pub struct TCPConnector {
 
 impl TCPConnector {
     pub fn new(cfg: TunnelConfiguration) -> Result<Self, ConnectorError> {
-        Ok(TCPConnector{
-            cfg: cfg,
-        })
+        Ok(TCPConnector { cfg: cfg })
     }
 }
 
 impl Connector for TCPConnector {
-    fn start(&self, shutdown_rx: tokio::sync::mpsc::Receiver<()>) -> Result<(tokio::sync::mpsc::Sender<Payload>,
-        tokio::sync::mpsc::Receiver<Payload>), ConnectorError> {
+    fn start(
+        &self,
+        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+    ) -> Result<
+        (
+            tokio::sync::mpsc::Sender<Payload>,
+            tokio::sync::mpsc::Receiver<Payload>,
+        ),
+        ConnectorError,
+    > {
         let (in_tx, in_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
         let (out_tx, out_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
 
@@ -182,9 +198,12 @@ pub struct TUNConnector {
 }
 
 impl TUNConnector {
-    pub fn new(cfg: LanConfiguration, runtime: tokio::runtime::Handle, 
-        device: Arc<TUNDevice>) -> Result<Self, DeviceError> {
-        Ok(TUNConnector{
+    pub fn new(
+        cfg: LanConfiguration,
+        runtime: tokio::runtime::Handle,
+        device: Arc<TUNDevice>,
+    ) -> Result<Self, DeviceError> {
+        Ok(TUNConnector {
             cfg: cfg,
             device: device,
             runtime: runtime,
@@ -193,11 +212,19 @@ impl TUNConnector {
 }
 
 impl Connector for TUNConnector {
-    fn start(&self, mut shutdown_rx: tokio::sync::mpsc::Receiver<()>) -> Result<(tokio::sync::mpsc::Sender<Payload>,
-        tokio::sync::mpsc::Receiver<Payload>), ConnectorError> {
-        let (in_tx, in_rx) = tokio::sync::mpsc::channel::<Payload>(self.cfg.buffer_size); 
+    fn start(
+        &self,
+        mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+    ) -> Result<
+        (
+            tokio::sync::mpsc::Sender<Payload>,
+            tokio::sync::mpsc::Receiver<Payload>,
+        ),
+        ConnectorError,
+    > {
+        let (in_tx, in_rx) = tokio::sync::mpsc::channel::<Payload>(self.cfg.buffer_size);
         let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Payload>(self.cfg.buffer_size);
-        
+
         let device = self.device.clone();
         let runtime = self.runtime.clone();
 
@@ -259,18 +286,24 @@ pub struct TAPConnector {
 
 impl TAPConnector {
     pub fn new(device: TAPDevice) -> Result<Self, DeviceError> {
-        Ok(TAPConnector{
-            device: device,
-        })
+        Ok(TAPConnector { device: device })
     }
 }
 
 impl Connector for TAPConnector {
-    fn start(&self, shutdown_rx: tokio::sync::mpsc::Receiver<()>) -> Result<(tokio::sync::mpsc::Sender<Payload>,
-        tokio::sync::mpsc::Receiver<Payload>), ConnectorError> {
-            let (in_tx, in_rx) = tokio::sync::mpsc::channel::<Payload>(100); // TODO
-            let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Payload>(100); // TODO
-        
-            Ok((out_tx, in_rx))
-        }
+    fn start(
+        &self,
+        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+    ) -> Result<
+        (
+            tokio::sync::mpsc::Sender<Payload>,
+            tokio::sync::mpsc::Receiver<Payload>,
+        ),
+        ConnectorError,
+    > {
+        let (in_tx, in_rx) = tokio::sync::mpsc::channel::<Payload>(100); // TODO
+        let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Payload>(100); // TODO
+
+        Ok((out_tx, in_rx))
+    }
 }

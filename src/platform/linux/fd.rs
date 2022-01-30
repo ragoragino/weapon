@@ -1,22 +1,16 @@
-use libc::{
-    self,
-    fcntl,
-    F_GETFL, 
-    F_SETFL, 
-    O_NONBLOCK,
-};
-use std::os::unix::io::{
-    RawFd,
-    AsRawFd,
-};
 use crate::platform::error::DeviceError;
+use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
+use std::os::unix::io::{AsRawFd, RawFd};
 
 pub struct Fd(pub RawFd);
 
 impl Fd {
     pub fn new(value: RawFd) -> Result<Self, DeviceError> {
         if value < 0 {
-            return Err(DeviceError::UnexpectedError(format!("invalid file descriptor: {}", value)));
+            return Err(DeviceError::UnexpectedError(format!(
+                "invalid file descriptor: {}",
+                value
+            )));
         }
 
         Ok(Fd(value))
