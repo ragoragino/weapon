@@ -11,11 +11,15 @@ pub const SIOCGIFFLAGS: c_ulong = 0x8913;
 pub const SIOCSIFFLAGS: c_ulong = 0x8914;
 pub const SIOCSIFADDR: c_ulong = 0x8916;
 pub const SIOCSIFNETMASK: c_ulong = 0x891c;
+pub const SIOCADDRT: c_ulong = 0x890B;
 
 pub const IFF_TUN: c_short = 0x0001;
 pub const IFF_TAP: c_short = 0x0002;
 pub const IFF_NO_PI: c_short = 0x1000;
 pub const IFF_MULTI_QUEUE: c_short = 0x0100;
+
+pub const RTF_UP: c_ushort = 0x0001;
+pub const RTF_GATEWAY: c_ushort = 0x0002;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -87,3 +91,25 @@ ioctl_write_ptr_bad!(siocgifflags, SIOCGIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifflags, SIOCSIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifaddr, SIOCSIFADDR, ifreq);
 ioctl_write_ptr_bad!(siocsifnetmask, SIOCSIFNETMASK, ifreq);
+
+
+/* This structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct rtentry {
+	pub rt_pad1: c_ulong,
+	pub rt_dst: sockaddr, // target address
+	pub rt_gateway: sockaddr, // gateway addr (RTF_GATEWAY)
+	pub rt_genmask: sockaddr, // target network mask (IP)
+	pub rt_flags: c_ushort,  // target network mask (IP)
+	pub rt_pad2: c_short,
+	pub rt_pad3: c_ulong,
+	pub rt_pad4: *mut c_void,
+	pub rt_metric: c_short,	// +1 for binary compatibility!
+	pub rt_dev: *mut c_char, // forcing the device at add
+	pub rt_mtu: c_ulong, // per route MTU/Window
+	pub rt_window: c_ulong, // Window clamping
+	pub rt_irtt: c_ushort,	// Initial RTT
+}
+
+ioctl_write_ptr_bad!(siocaddrt, SIOCADDRT, rtentry);

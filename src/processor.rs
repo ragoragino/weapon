@@ -1,4 +1,5 @@
 use tokio;
+use std::sync::Arc;
 
 use crate::payload::*;
 
@@ -21,7 +22,9 @@ pub struct Processor {
 
 impl Processor {
     pub fn new(runtime: tokio::runtime::Handle) -> Result<Self, ProcessorError> {
-        Ok(Processor { runtime: runtime })
+        Ok(Processor { 
+            runtime: runtime,
+        })
     }
 
     pub fn start(
@@ -35,7 +38,7 @@ impl Processor {
             loop {
                 tokio::select! {
                     payload_opt = cfg.lan_rx.recv() => {
-                        let payload = match payload_opt {
+                        let mut payload = match payload_opt {
                             Some(payload) => payload,
                             None => {
                                 continue;
@@ -48,7 +51,7 @@ impl Processor {
                         });
                     },
                     payload_opt = cfg.tunnel_rx.recv() => {
-                        let payload = match payload_opt {
+                        let mut payload = match payload_opt {
                             Some(payload) => payload,
                             None => {
                                 continue;
@@ -68,5 +71,28 @@ impl Processor {
         });
 
         Ok(())
+    }
+}
+
+pub enum PacketOrigin {
+    LAN,
+    TUNNEL,
+}
+
+pub trait Filter {
+    fn filter(&self, payload: *mut Payload, origin: PacketOrigin);
+}
+
+struct DebugFilter {}
+
+impl DebugFilter {
+    fn new() -> DebugFilter {
+        return DebugFilter{}
+    }
+}
+
+impl Filter for DebugFilter {
+    fn filter(&self, payload: *mut Payload, origin: PacketOrigin) {
+
     }
 }

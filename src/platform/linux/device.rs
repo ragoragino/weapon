@@ -39,52 +39,11 @@ impl TUNDevice {
             siocsifflags(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
             // Set address.
-            let ip = match cfg.address {
-                std::net::IpAddr::V4(ip) => ip,
-                std::net::IpAddr::V6(_) => {
-                    return Err(DeviceError::UnexpectedError(format!(
-                        "only v4 ip addresses are currently supported"
-                    )))
-                }
-            };
-
-            let servaddr = libc::sockaddr_in {
-                sin_family: AF_INET as u16,
-                sin_port: 0,
-                sin_addr: libc::in_addr {
-                    s_addr: u32::from_be_bytes(ip.octets()).to_be(),
-                },
-                sin_zero: std::mem::zeroed(),
-            };
-
-            let serveraddr_ptr = &servaddr as *const libc::sockaddr_in as *const libc::sockaddr;
-            req.ifru.addr = *serveraddr_ptr;
-
+            req.ifru.addr = ipaddr_to_sockaddr(cfg.address)?;
             siocsifaddr(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
-            // Set netmask.
-            let netmask_ip = match cfg.netmask {
-                std::net::IpAddr::V4(mask) => mask,
-                std::net::IpAddr::V6(_) => {
-                    return Err(DeviceError::UnexpectedError(format!(
-                        "only v4 ip addresses are currently supported"
-                    )))
-                }
-            };
-
-            let netmaskaddr = libc::sockaddr_in {
-                sin_family: AF_INET as u16,
-                sin_port: 0,
-                sin_addr: libc::in_addr {
-                    s_addr: u32::from_be_bytes(netmask_ip.octets()).to_be(),
-                },
-                sin_zero: std::mem::zeroed(),
-            };
-
-            let netmaskaddr_ptr = &netmaskaddr as *const libc::sockaddr_in as *const libc::sockaddr;
-            req.ifru.netmask = *netmaskaddr_ptr;
-
-            siocsifnetmask(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
+            // Add new route entry.
+            add_route_entry(sock, cfg.address, cfg.destination, cfg.netmask)?;
 
             let _guard = runtime.enter();
             Ok(Self {
@@ -128,5 +87,79 @@ pub struct TAPDevice {}
 impl TAPDevice {
     pub fn new(cfg: TAPDeviceConfiguration) -> Result<Self, DeviceError> {
         Ok(TAPDevice {})
+    }
+}
+
+fn add_route_entry(socket: i32, 
+    gateway: std::net::IpAddr, 
+    destination: std::net::IpAddr, 
+    netmask: std::net::IpAddr) -> Result<(), DeviceError> {
+    unsafe {
+        let mut entry: rtentry = std::mem::zeroed();
+
+        entry.rt_gateway = ipaddr_to_sockaddr(gateway)?;
+        entry.rt_dst = ipaddr_to_sockaddr(destination)?;
+        entry.rt_genmask = ipaddr_to_sockaddr(netmask)?;
+        entry.rt_flags = RTF_UP | RTF_GATEWAY;
+
+        siocaddrt(socket, &entry).map_err(|_| std::io::Error::last_os_error())?;
+
+        Ok(())
+    }
+}
+
+fn ipaddr_to_sockaddr(address: std::net::IpAddr) -> Result<libc::sockaddr, DeviceError> {
+    unsafe {
+        let ip = match address {
+            std::net::IpAddr::V4(ip) => ip,
+            std::net::IpAddr::V6(_) => {
+                return Err(DeviceError::UnexpectedError(format!(
+                    "only v4 ip addresses are currently supported"
+                )))
+            }
+        };
+    
+        let dst_addr_in = libc::sockaddr_in {
+            sin_family: AF_INET as u16,
+            sin_port: 0,
+            sin_addr: libc::in_addr {
+                s_addr: u32::from_be_bytes(ip.octets()).to_be(),
+            },
+            sin_zero: std::mem::zeroed(),
+        };
+    
+        let dst_addr_ptr = &dst_addr_in as *const libc::sockaddr_in as *const libc::sockaddr;
+        Ok(*dst_addr_ptr)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ipaddr_to_sockaddr() {
+        let ipaddr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(127,0,0,1));
+
+        let mut data: [libc::c_char; 14] = [0; 14];
+        data[2] = 127;
+        data[5] = 1;
+        let expected_sockaddr = libc::sockaddr{
+            sa_family: AF_INET as u16,
+            sa_data: data,
+        };
+
+        let sockaddr = ipaddr_to_sockaddr(ipaddr)
+            .expect("unable to parse ipaddr to sockaddr");
+        assert_eq!(expected_sockaddr, sockaddr);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_ipaddr_v6_to_sockaddr() {
+        let ipaddr = std::net::IpAddr::V6(std::net::Ipv6Addr::new(0,0,0,0,0,0,0,1));
+        let _ = ipaddr_to_sockaddr(ipaddr)
+            .expect("unable to parse ipaddr to sockaddr");
     }
 }

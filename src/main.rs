@@ -12,6 +12,9 @@ use connector::*;
 use platform::*;
 use processor::*;
 
+// TODO: Think about how to create networks to use
+// TODO: Add filters to processor and debug 52 bytes
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Mode {
@@ -63,7 +66,8 @@ fn main() {
                 "mode": "TUN",
                 "buffer_size": 1000,
                 "tun_configuration": {
-                    "address": "10.0.0.3",
+                    "address": "10.0.0.0",
+                    "destination": "10.0.1.0",
                     "netmask": "255.255.255.0"
                 }
             }
