@@ -13,7 +13,8 @@ use platform::*;
 use processor::*;
 
 // TODO: Think about how to create networks to use
-// TODO: Add filters to processor and debug 52 bytes
+// TODO: Tap
+// TODO: Allow not running as sudo
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]

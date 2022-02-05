@@ -1,5 +1,6 @@
 use libc::{socket, AF_INET, O_RDWR, SOCK_DGRAM};
 use tokio::io::unix::AsyncFd;
+use std::process::Command;
 
 use crate::platform::linux::{fd::*, sys::*};
 use crate::platform::{
@@ -24,9 +25,19 @@ impl TUNDevice {
             let mut req: ifreq = std::mem::zeroed();
 
             // Create the device.
-            req.ifru.flags |= IFF_TUN;
+            // IFF_NO_PI: Don't prepend packet information, see
+            // https://www.gabriel.urdhr.fr/2021/05/08/tuntap/.
+            req.ifru.flags |= IFF_TUN | IFF_NO_PI;
             tunsetiff(tun.0, &mut req as *mut _ as *mut _)?;
 
+            // Turn off IPv6 router soliciation messages.
+            // https://sysctl-explorer.net/net/ipv6/router_solicitations/
+            Command::new("sh")
+                .arg("-c")
+                .arg("echo 0 > /proc/sys/net/ipv6/conf/tun0/router_solicitations")
+                .output()?;
+
+            // Create a control socket.
             let sock = match socket(AF_INET, SOCK_DGRAM, 0) {
                 i if i >= 0 => i,
                 _ => return Err(DeviceError::IOError(std::io::Error::last_os_error())),

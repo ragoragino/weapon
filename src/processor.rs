@@ -122,7 +122,7 @@ impl Filter for DebugFilter {
         };
 
         let source_addr = header.source_addr();
-        let dest_addr = header.source_addr();
+        let dest_addr = header.destination_addr();
         let protocol = header.protocol();
 
         debug!("Packet received from: {:?}, destined to: {:?}, protocol: {:?}", 
