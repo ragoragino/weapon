@@ -164,7 +164,7 @@ fn run_p2p(
                 .ok_or(Box::new(SetupError::UnexpectedError(
                     "missing TAP configuration".into(),
                 )))?;
-            let device = TAPDevice::new(device_cfg)?;
+            let device = TAPDevice::new(device_cfg, runtime.handle().clone())?;
             Box::new(TAPConnector::new(device)?) as Box<dyn Connector>
         }
     };

@@ -1,11 +1,7 @@
-use tokio;
+use etherparse::Ipv4HeaderSlice;
+use log::debug;
 use std::sync::Arc;
-use etherparse::{
-    Ipv4HeaderSlice,
-};
-use log::{
-    debug,
-};
+use tokio;
 
 use crate::payload::*;
 
@@ -31,7 +27,7 @@ impl Processor {
     pub fn new(runtime: tokio::runtime::Handle) -> Result<Self, ProcessorError> {
         let filter = Arc::new(DebugFilter::new(None));
 
-        Ok(Processor { 
+        Ok(Processor {
             runtime: runtime,
             filter: filter as Arc<dyn Filter + Send + Sync>,
         })
@@ -105,9 +101,7 @@ struct DebugFilter {
 
 impl DebugFilter {
     fn new(next: Option<Box<dyn Filter + Send + Sync>>) -> DebugFilter {
-        return DebugFilter{
-            next: next, 
-        }
+        return DebugFilter { next: next };
     }
 }
 
@@ -117,20 +111,22 @@ impl Filter for DebugFilter {
             Ok(header) => header,
             Err(err) => {
                 debug!("Unable to parse ipv4 header: {}", err);
-                return 
-            },
+                return;
+            }
         };
 
         let source_addr = header.source_addr();
         let dest_addr = header.destination_addr();
         let protocol = header.protocol();
 
-        debug!("Packet received from: {:?}, destined to: {:?}, protocol: {:?}", 
-            source_addr, dest_addr, protocol);
+        debug!(
+            "Packet received from: {:?}, destined to: {:?}, protocol: {:?}",
+            source_addr, dest_addr, protocol
+        );
 
         match &self.next {
             Some(f) => f.filter(payload, origin),
-            None => {},
+            None => {}
         }
     }
 }
