@@ -1,5 +1,4 @@
 use libc::{socket, AF_INET, O_RDWR, SOCK_DGRAM};
-use log::debug;
 use std::process::Command;
 use tokio::io::unix::AsyncFd;
 

@@ -1,4 +1,4 @@
-use etherparse::{EtherType, Ethernet2HeaderSlice, Ipv4HeaderSlice};
+use etherparse::{Ethernet2HeaderSlice, Ipv4HeaderSlice};
 use log::debug;
 use std::sync::Arc;
 use tokio;

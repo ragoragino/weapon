@@ -107,10 +107,9 @@ impl Connector for UDPConnector {
             loop {
                 tokio::select! {
                     result = socket.recv_from(&mut buf) => {
-                        let (len, addr) = match result {
+                        let (len, _addr) = match result {
                             Ok((len, addr)) => (len, addr),
                             Err(err) => {
-                                // TODO: Improve handling here.
                                 error!("Failed receiving from socket: {}", err);
                                 continue;
                             }
@@ -166,7 +165,7 @@ impl TCPConnector {
 impl Connector for TCPConnector {
     fn start(
         &self,
-        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+        _shutdown_rx: tokio::sync::mpsc::Receiver<()>,
     ) -> Result<
         (
             tokio::sync::mpsc::Sender<Payload>,
@@ -174,8 +173,8 @@ impl Connector for TCPConnector {
         ),
         ConnectorError,
     > {
-        let (in_tx, in_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
-        let (out_tx, out_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
+        let (_in_tx, in_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
+        let (out_tx, _out_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
 
         // TODO
         Ok((out_tx, in_rx))
