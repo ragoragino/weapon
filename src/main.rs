@@ -1,4 +1,5 @@
 use env_logger::Env;
+use libc::{setgid, setuid};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio;
@@ -13,7 +14,6 @@ use platform::*;
 use processor::*;
 
 // TODO: Think about how to create networks to use
-// TODO: Allow not running as sudo
 // TODO: Debug IPv4/IPv6 packets from TAP device
 
 #[derive(Debug, Deserialize)]
@@ -24,10 +24,19 @@ enum Mode {
 }
 
 #[derive(Debug, Deserialize)]
-struct ClientServerConfiguration {}
+struct ClientServerConfiguration {
+    #[serde(skip)]
+    uid: u32,
+    #[serde(skip)]
+    gid: u32,
+}
 
 #[derive(Debug, Deserialize)]
 struct P2PConfiguration {
+    #[serde(skip)]
+    uid: u32,
+    #[serde(skip)]
+    gid: u32,
     #[serde(rename = "tunnel_configuration")]
     tunnel_cfg: TunnelConfiguration,
     #[serde(rename = "lan_configuration")]
@@ -36,6 +45,8 @@ struct P2PConfiguration {
 
 #[derive(Debug, Deserialize)]
 struct Configuration {
+    uid: u32,
+    gid: u32,
     mode: Mode,
     #[serde(rename = "client_server_configuration")]
     client_server_cfg: Option<ClientServerConfiguration>,
@@ -55,6 +66,8 @@ fn main() {
 
     // Parse configuration.
     let cfg_json = r#"{
+        "uid": 1000,
+        "gid": 1000,
         "mode": "p2p",
         "p2p_configuration": {
             "tunnel_configuration": {
@@ -66,7 +79,7 @@ fn main() {
             "lan_configuration": {
                 "buffer_size": 1000,
                 "device_configuration": {
-                    "device_type": "TAP",
+                    "device_type": "TUN",
                     "address": "10.0.0.0",
                     "destination": "10.0.1.0",
                     "netmask": "255.255.255.0"
@@ -88,24 +101,29 @@ fn main() {
     // Start VPN.
     match cfg.mode {
         Mode::ClientServer => {
-            let cfg = match cfg.client_server_cfg {
+            let mut client_server_cfg = match cfg.client_server_cfg {
                 Some(cfg) => cfg,
                 None => {
                     panic!("Client-server configuration missing");
                 }
             };
 
-            run_client_server(shutdown_rx, &cfg).expect("Unable to run VPN in ClientServer mode.");
+            client_server_cfg.uid = cfg.uid;
+            client_server_cfg.gid = cfg.gid;
+            run_client_server(shutdown_rx, &client_server_cfg)
+                .expect("Unable to run VPN in ClientServer mode.");
         }
         Mode::P2P => {
-            let cfg = match cfg.p2p_cfg {
+            let mut p2p_cfg = match cfg.p2p_cfg {
                 Some(cfg) => cfg,
                 None => {
                     panic!("P2P configuration missing");
                 }
             };
 
-            run_p2p(shutdown_rx, &cfg).expect("Unable to run VPN in P2P mode.");
+            p2p_cfg.uid = cfg.uid;
+            p2p_cfg.gid = cfg.gid;
+            run_p2p(shutdown_rx, &p2p_cfg).expect("Unable to run VPN in P2P mode.");
         }
     }
 }
@@ -116,8 +134,8 @@ fn parse_config(json: &str) -> Result<Configuration, Box<dyn std::error::Error>>
 }
 
 fn run_client_server(
-    shutdown_rx: tokio::sync::mpsc::Receiver<()>,
-    cfg: &ClientServerConfiguration,
+    _shutdown_rx: tokio::sync::mpsc::Receiver<()>,
+    _cfg: &ClientServerConfiguration,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // TODO
     Ok(())
@@ -168,6 +186,8 @@ fn run_p2p(
     let (processor_shutdown_tx, processor_shutdown_rx) = tokio::sync::mpsc::channel(1);
     processor.start(processor_shutdown_rx, processor_cfg)?;
 
+    drop_priviliges(cfg.uid, cfg.gid)?;
+
     // Wait for the interrupt signal.
     shutdown_rx.blocking_recv();
 
@@ -177,6 +197,25 @@ fn run_p2p(
     let _ = processor_shutdown_tx.blocking_send(());
 
     // TODO: Wait for the components to finish.
+
+    Ok(())
+}
+
+// Drop root priviliges.
+// TODO: Couldn't make this work with capabilities, as we need to write to
+// /proc/sys/net/ipv6/conf/device_name/router_solicitations.
+fn drop_priviliges(uid: u32, gid: u32) -> Result<(), Box<dyn std::error::Error>> {
+    match unsafe { setgid(gid) } {
+        0 => {}
+        -1 => return Err(Box::new(std::io::Error::last_os_error())),
+        _ => unreachable!("failed dropping priviliges"),
+    }
+
+    match unsafe { setuid(uid) } {
+        0 => {}
+        -1 => return Err(Box::new(std::io::Error::last_os_error())),
+        _ => unreachable!("failed dropping priviliges"),
+    }
 
     Ok(())
 }
