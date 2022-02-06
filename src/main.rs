@@ -64,9 +64,9 @@ fn main() {
                 "buffer_size": 1000
             },
             "lan_configuration": {
-                "mode": "TUN",
                 "buffer_size": 1000,
-                "tun_configuration": {
+                "device_configuration": {
+                    "device_type": "TAP",
                     "address": "10.0.0.0",
                     "destination": "10.0.1.0",
                     "netmask": "255.255.255.0"
@@ -142,32 +142,13 @@ fn run_p2p(
         }
     };
 
-    let lan = match cfg.lan_cfg.mode {
-        LanDeviceMode::TUN => {
-            let device_cfg = cfg
-                .lan_cfg
-                .tun_cfg
-                .ok_or(Box::new(SetupError::UnexpectedError(
-                    "missing TUN configuration".into(),
-                )))?;
-            let device = Arc::new(TUNDevice::new(device_cfg, runtime.handle().clone())?);
-            Box::new(TUNConnector::new(
-                cfg.lan_cfg,
-                runtime.handle().clone(),
-                device,
-            )?) as Box<dyn Connector>
-        }
-        LanDeviceMode::TAP => {
-            let device_cfg = cfg
-                .lan_cfg
-                .tap_cfg
-                .ok_or(Box::new(SetupError::UnexpectedError(
-                    "missing TAP configuration".into(),
-                )))?;
-            let device = TAPDevice::new(device_cfg, runtime.handle().clone())?;
-            Box::new(TAPConnector::new(device)?) as Box<dyn Connector>
-        }
-    };
+    let device_cfg = cfg.lan_cfg.device_cfg;
+    let device = Arc::new(Device::new(device_cfg, runtime.handle().clone())?);
+    let lan = Box::new(TUNTAPConnector::new(
+        cfg.lan_cfg,
+        runtime.handle().clone(),
+        device,
+    )?) as Box<dyn Connector>;
 
     // Start tunnel handler, lan device handler, and the processor.
     let (tunnel_shutdown_tx, tunnel_shutdown_rx) = tokio::sync::mpsc::channel(1);

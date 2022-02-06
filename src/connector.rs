@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio;
 
 use crate::payload::*;
-use crate::platform::{config::*, error::*, TAPDevice, TUNDevice};
+use crate::platform::{config::*, error::*, Device};
 
 const MAX_DATAGRAM_SIZE: usize = 65535;
 const MAX_MTU_SIZE: usize = 1500;
@@ -31,19 +31,10 @@ pub struct TunnelConfiguration {
 }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
-pub enum LanDeviceMode {
-    TUN,
-    TAP,
-}
-
-#[derive(Debug, Copy, Clone, Deserialize)]
 pub struct LanConfiguration {
-    pub mode: LanDeviceMode,
     pub buffer_size: usize,
-    #[serde(rename = "tun_configuration")]
-    pub tun_cfg: Option<TUNDeviceConfiguration>,
-    #[serde(rename = "tap_configuration")]
-    pub tap_cfg: Option<TAPDeviceConfiguration>,
+    #[serde(rename = "device_configuration")]
+    pub device_cfg: DeviceConfiguration,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -191,19 +182,19 @@ impl Connector for TCPConnector {
     }
 }
 
-pub struct TUNConnector {
+pub struct TUNTAPConnector {
     cfg: LanConfiguration,
-    device: Arc<TUNDevice>,
+    device: Arc<Device>,
     runtime: tokio::runtime::Handle,
 }
 
-impl TUNConnector {
+impl TUNTAPConnector {
     pub fn new(
         cfg: LanConfiguration,
         runtime: tokio::runtime::Handle,
-        device: Arc<TUNDevice>,
+        device: Arc<Device>,
     ) -> Result<Self, DeviceError> {
-        Ok(TUNConnector {
+        Ok(TUNTAPConnector {
             cfg: cfg,
             device: device,
             runtime: runtime,
@@ -211,7 +202,7 @@ impl TUNConnector {
     }
 }
 
-impl Connector for TUNConnector {
+impl Connector for TUNTAPConnector {
     fn start(
         &self,
         mut shutdown_rx: tokio::sync::mpsc::Receiver<()>,
@@ -238,7 +229,7 @@ impl Connector for TUNConnector {
                             Ok(len) => len,
                             Err(err) => {
                                 // TODO: Improve handling here.
-                                error!("Failed receiving from socket: {}", err);
+                                error!("Failed receiving from device: {}", err);
                                 continue;
                             }
                         };
@@ -247,7 +238,7 @@ impl Connector for TUNConnector {
                             data: buf[..len].into(),
                         };
 
-                        debug!("Received data on TUN device: {}", len);
+                        debug!("Received data on device: {}", len);
 
                         let in_tx = in_tx.clone();
                         runtime.spawn(async move {
@@ -262,7 +253,7 @@ impl Connector for TUNConnector {
                             }
                         };
 
-                        debug!("Sending data to TUN device: {}", payload.data.len());
+                        debug!("Sending data to device: {}", payload.data.len());
 
                         let device = device.clone();
                         runtime.spawn(async move {
@@ -275,34 +266,6 @@ impl Connector for TUNConnector {
                 };
             }
         });
-
-        Ok((out_tx, in_rx))
-    }
-}
-
-pub struct TAPConnector {
-    device: TAPDevice,
-}
-
-impl TAPConnector {
-    pub fn new(device: TAPDevice) -> Result<Self, DeviceError> {
-        Ok(TAPConnector { device: device })
-    }
-}
-
-impl Connector for TAPConnector {
-    fn start(
-        &self,
-        shutdown_rx: tokio::sync::mpsc::Receiver<()>,
-    ) -> Result<
-        (
-            tokio::sync::mpsc::Sender<Payload>,
-            tokio::sync::mpsc::Receiver<Payload>,
-        ),
-        ConnectorError,
-    > {
-        let (in_tx, in_rx) = tokio::sync::mpsc::channel::<Payload>(100); // TODO
-        let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Payload>(100); // TODO
 
         Ok((out_tx, in_rx))
     }

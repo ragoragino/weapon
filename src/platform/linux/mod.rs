@@ -1,5 +1,5 @@
 pub mod device;
-pub use device::{TAPDevice, TUNDevice};
+pub use device::Device;
 
 mod fd;
 mod sys;

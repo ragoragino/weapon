@@ -1,10 +1,10 @@
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "linux")]
-pub use self::linux::{TAPDevice, TUNDevice};
+pub use self::linux::Device;
 
 pub mod config;
-pub use config::{TAPDeviceConfiguration, TUNDeviceConfiguration};
+pub use config::DeviceConfiguration;
 
 pub mod error;
 pub use error::DeviceError;

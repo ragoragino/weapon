@@ -4,17 +4,15 @@ use std::process::Command;
 use tokio::io::unix::AsyncFd;
 
 use crate::platform::linux::{fd::*, sys::*};
-use crate::platform::{
-    config::TAPDeviceConfiguration, config::TUNDeviceConfiguration, error::DeviceError,
-};
+use crate::platform::{config::DeviceConfiguration, config::DeviceType, error::DeviceError};
 
-pub struct TUNDevice {
+pub struct Device {
     inner: AsyncFd<Fd>,
 }
 
-impl TUNDevice {
+impl Device {
     pub fn new(
-        cfg: TUNDeviceConfiguration,
+        cfg: DeviceConfiguration,
         runtime: tokio::runtime::Handle,
     ) -> Result<Self, DeviceError> {
         unsafe {
@@ -28,7 +26,11 @@ impl TUNDevice {
             // Create the device.
             // IFF_NO_PI: Don't prepend packet information, see
             // https://www.gabriel.urdhr.fr/2021/05/08/tuntap/.
-            req.ifru.flags |= IFF_TUN | IFF_NO_PI;
+            let device_type = match cfg.device_type {
+                DeviceType::TUN => IFF_TUN,
+                DeviceType::TAP => IFF_TAP,
+            };
+            req.ifru.flags |= device_type | IFF_NO_PI;
             tunsetiff(tun.0, &mut req as *mut _ as *mut _)?;
 
             // Turn off IPv6 router soliciation messages.
@@ -44,7 +46,6 @@ impl TUNDevice {
                     )))
                 }
             };
-            debug!("Device name: {:?}", device_name);
             Command::new("sh")
                 .arg("-c")
                 .arg(format!(
@@ -69,86 +70,15 @@ impl TUNDevice {
             req.ifru.addr = ipaddr_to_sockaddr(cfg.address)?;
             siocsifaddr(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
+            // Set address netmask.
+            let netmask = "255.255.255.255".parse::<std::net::IpAddr>().map_err(|e| {
+                DeviceError::UnexpectedError(format!("unable to parse netmask: {}", e))
+            })?;
+            req.ifru.netmask = ipaddr_to_sockaddr(netmask)?;
+            siocsifnetmask(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
+
             // Add new route entry.
             add_route_entry(sock, cfg.address, cfg.destination, cfg.netmask)?;
-
-            let _guard = runtime.enter();
-            Ok(Self {
-                inner: AsyncFd::new(tun)?,
-            })
-        }
-    }
-
-    pub async fn read(&self, buf: &mut [u8]) -> Result<usize, DeviceError> {
-        loop {
-            let mut guard = self.inner.readable().await?;
-
-            match guard.try_io(|inner| inner.get_ref().read(buf)) {
-                Ok(result) => match result {
-                    Ok(size) => return Ok(size),
-                    Err(err) => return Err(DeviceError::IOError(err)),
-                },
-                Err(_would_block) => continue,
-            }
-        }
-    }
-
-    pub async fn write(&self, buf: &mut [u8]) -> Result<usize, DeviceError> {
-        loop {
-            let mut guard = self.inner.writable().await?;
-
-            match guard.try_io(|inner| inner.get_ref().write(buf)) {
-                Ok(result) => match result {
-                    Ok(size) => return Ok(size),
-                    Err(err) => return Err(DeviceError::IOError(err)),
-                },
-                Err(_would_block) => continue,
-            }
-        }
-    }
-}
-
-pub struct TAPDevice {
-    inner: AsyncFd<Fd>,
-}
-
-impl TAPDevice {
-    pub fn new(
-        cfg: TAPDeviceConfiguration,
-        runtime: tokio::runtime::Handle,
-    ) -> Result<Self, DeviceError> {
-        unsafe {
-            let tun = Fd::new(libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR))
-                .map_err(|_| std::io::Error::last_os_error())?;
-
-            tun.set_nonblock()?;
-
-            let mut req: ifreq = std::mem::zeroed();
-
-            // Create the device.
-            // IFF_NO_PI: Don't prepend packet information, see
-            // https://www.gabriel.urdhr.fr/2021/05/08/tuntap/.
-            req.ifru.flags |= IFF_TAP | IFF_NO_PI;
-            tunsetiff(tun.0, &mut req as *mut _ as *mut _)?;
-
-            // Create a control socket.
-            let sock = match socket(AF_INET, SOCK_DGRAM, 0) {
-                i if i >= 0 => i,
-                _ => return Err(DeviceError::IOError(std::io::Error::last_os_error())),
-            };
-
-            // Enable the device.
-            siocgifflags(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
-
-            req.ifru.flags |= IFF_UP | IFF_RUNNING;
-            siocsifflags(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
-
-            // Set address.
-            //req.ifru.addr = ipaddr_to_sockaddr(cfg.address)?;
-            //siocsifaddr(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
-
-            // Add new route entry.
-            // add_route_entry(sock, cfg.address, cfg.destination, cfg.netmask)?;
 
             let _guard = runtime.enter();
             Ok(Self {
