@@ -13,8 +13,8 @@ use platform::*;
 use processor::*;
 
 // TODO: Think about how to create networks to use
-// TODO: Tap
 // TODO: Allow not running as sudo
+// TODO: Debug IPv4/IPv6 packets from TAP device
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]

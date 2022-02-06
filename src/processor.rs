@@ -1,4 +1,4 @@
-use etherparse::Ipv4HeaderSlice;
+use etherparse::{EtherType, Ethernet2HeaderSlice, Ipv4HeaderSlice};
 use log::debug;
 use std::sync::Arc;
 use tokio;
@@ -103,15 +103,12 @@ impl DebugFilter {
     fn new(next: Option<Box<dyn Filter + Send + Sync>>) -> DebugFilter {
         return DebugFilter { next: next };
     }
-}
 
-impl Filter for DebugFilter {
-    fn filter(&self, payload: &mut Payload, origin: PacketOrigin) {
+    fn try_parse_layer_3(&self, payload: &mut Payload) -> bool {
         let header = match Ipv4HeaderSlice::from_slice(&payload.data) {
             Ok(header) => header,
-            Err(err) => {
-                debug!("Unable to parse ipv4 header: {}", err);
-                return;
+            Err(_) => {
+                return false;
             }
         };
 
@@ -123,6 +120,42 @@ impl Filter for DebugFilter {
             "Packet received from: {:?}, destined to: {:?}, protocol: {:?}",
             source_addr, dest_addr, protocol
         );
+
+        true
+    }
+
+    fn try_parse_layer_2(&self, payload: &mut Payload) -> bool {
+        let header = match Ethernet2HeaderSlice::from_slice(&payload.data) {
+            Ok(header) => header,
+            Err(_) => {
+                return false;
+            }
+        };
+
+        let source_addr = header.source();
+        let dest_addr = header.destination();
+        let ether_type = header.ether_type();
+        let ether_type_enum = match etherparse::EtherType::from_u16(ether_type) {
+            Some(t) => t,
+            None => return false,
+        };
+
+        debug!(
+            "Frame received from: {:?}, destined to: {:?}, ether_type: {:?}",
+            source_addr, dest_addr, ether_type_enum
+        );
+
+        true
+    }
+}
+
+impl Filter for DebugFilter {
+    fn filter(&self, payload: &mut Payload, origin: PacketOrigin) {
+        let is_packet = self.try_parse_layer_3(payload);
+        let is_frame = self.try_parse_layer_2(payload);
+        if !is_packet && !is_frame {
+            debug!("Received payload is not a Layer 2 or a Layer 3 payload!")
+        }
 
         match &self.next {
             Some(f) => f.filter(payload, origin),
