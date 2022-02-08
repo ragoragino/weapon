@@ -10,6 +10,3 @@ https://openvpn.net/vpn-server-resources/site-to-site-routing-explained-in-detai
 
 https://www.gabriel.urdhr.fr/2021/05/08/tuntap/
 https://www.kernel.org/doc/Documentation/networking/tuntap.txt
-
-
-00804500546464004011f64a000a01080893974ab08f6ffe6100001f6fe00000101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637

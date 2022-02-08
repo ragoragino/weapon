@@ -79,7 +79,7 @@ fn main() {
             "lan_configuration": {
                 "buffer_size": 1000,
                 "device_configuration": {
-                    "device_type": "TUN",
+                    "device_type": "TAP",
                     "address": "10.0.0.0",
                     "destination": "10.0.1.0",
                     "netmask": "255.255.255.0"

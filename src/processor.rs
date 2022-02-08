@@ -104,8 +104,8 @@ impl DebugFilter {
         return DebugFilter { next: next };
     }
 
-    fn try_parse_layer_3(&self, payload: &mut Payload) -> bool {
-        let header = match Ipv4HeaderSlice::from_slice(&payload.data) {
+    fn try_parse_layer_3(&self, data: &[u8]) -> bool {
+        let header = match Ipv4HeaderSlice::from_slice(data) {
             Ok(header) => header,
             Err(_) => {
                 return false;
@@ -124,8 +124,8 @@ impl DebugFilter {
         true
     }
 
-    fn try_parse_layer_2(&self, payload: &mut Payload) -> bool {
-        let header = match Ethernet2HeaderSlice::from_slice(&payload.data) {
+    fn try_parse_layer_2(&self, data: &[u8]) -> bool {
+        let header = match Ethernet2HeaderSlice::from_slice(data) {
             Ok(header) => header,
             Err(_) => {
                 return false;
@@ -140,10 +140,19 @@ impl DebugFilter {
             None => return false,
         };
 
-        debug!(
-            "Frame received from: {:?}, destined to: {:?}, ether_type: {:?}",
-            source_addr, dest_addr, ether_type_enum
-        );
+        if data.len() < 18 {
+            return false;
+        }
+
+        let layer_3_data_start = 14;
+        let layer_3_data_end = data.len() - 4;
+        let l3_layer_data = &data[layer_3_data_start..layer_3_data_end];
+        if !self.try_parse_layer_3(&l3_layer_data) {
+            debug!(
+                "Frame received from: {:?}, destined to: {:?}, ether_type: {:?}",
+                source_addr, dest_addr, ether_type_enum
+            );
+        }
 
         true
     }
@@ -151,8 +160,8 @@ impl DebugFilter {
 
 impl Filter for DebugFilter {
     fn filter(&self, payload: &mut Payload, origin: PacketOrigin) {
-        let is_packet = self.try_parse_layer_3(payload);
-        let is_frame = self.try_parse_layer_2(payload);
+        let is_packet = self.try_parse_layer_3(&payload.data);
+        let is_frame = self.try_parse_layer_2(&payload.data);
         if !is_packet && !is_frame {
             debug!("Received payload is not a Layer 2 or a Layer 3 payload!")
         }

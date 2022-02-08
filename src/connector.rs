@@ -69,7 +69,14 @@ impl UDPConnector {
         cfg: TunnelConfiguration,
         runtime: tokio::runtime::Handle,
     ) -> Result<Self, ConnectorError> {
-        let std_sock = std::net::UdpSocket::bind(cfg.address)?;
+        let std_sock = match cfg.mode {
+            TunnelMode::Client => {
+                let std_sock = std::net::UdpSocket::bind("127.0.0.1:0")?;
+                std_sock.connect(cfg.address)?;
+                std_sock
+            }
+            TunnelMode::Listener => std::net::UdpSocket::bind(cfg.address)?,
+        };
         std_sock.set_nonblocking(true)?;
 
         let _guard = runtime.enter();
