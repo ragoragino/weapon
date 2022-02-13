@@ -15,6 +15,7 @@ use processor::*;
 
 // TODO: Think about how to create networks to use
 // TODO: Debug IPv4/IPv6 packets from TAP device
+// TODO: Encryption
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -41,6 +42,8 @@ struct P2PConfiguration {
     tunnel_cfg: TunnelConfiguration,
     #[serde(rename = "lan_configuration")]
     lan_cfg: LanConfiguration,
+    encryption_key: std::vec::Vec::<u8>,
+    decryption_key: std::vec::Vec::<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,10 +73,13 @@ fn main() {
         "gid": 1000,
         "mode": "p2p",
         "p2p_configuration": {
+            "encryption_key": "QIwGo0RaPct0RJAyg6oSjjQ6L+04eBWKtDhTjmfSlPjOWn6IU3R/RAAqcUYAwXz+g102IxrpQMy/GYZOHdsEeGUJkixcrhrLNJ0hZZ4lPXOTEYoecVQdeyqm69s/f2BE2PX4aIRwxGTMDaKo2Ddym1hkZoWGPFFZYT16/U0KmSDYn4nN9RLvyZ7AzOBc2l5LnIQlQqojNeUQFgnK9PDw/bkXAcuWZJdZZc45tK2V/+nqVKVOgTmUhppiUEVE3Wi67uClN9PFyEyIRXw1N0GhMVuHpfa+xeisTMzEH9oYilme9lfS1IRu5WJWzB7ZXvgDWJx2sxcB5qTZABsJ8F0sFA==",
+            "decryption_key": "ti2dX22g5X1wSLEw7VKf+hRblLWsL9EAApdE7KzqTVtWgU5KSl8/vNe7v9oghMsU/iQzxMyFe3l4MsDRIKmTAzn0ePw1AQsx49PZfOkqRV8jg/s8sJByF7bd/JRDMSz4uwNbeC1AQ6Scqxs55aK7EVsABHDL7LQF6orspj8+CrYsCU7imigohKhCtiZN9QMfB5loa6isIThzW1Ep09Syv2n5T3H39yr1cmKHoUgZndafOMvZGIYos6m2y+fZarVeeWakbHwqzW5BZRiuw+uvybokDPy4iKl6hH9l+GrUsQGCLZyWGAXkbdPeFmdIC5OCh4JFzZSG355KSHmCLOavBQ==",
             "tunnel_configuration": {
                 "mode": "listener",
                 "protocol": "UDP",
                 "address": "0.0.0.0:9000",
+                "peer_address": "192.168.0.1:9000",
                 "buffer_size": 1000
             },
             "lan_configuration": {
@@ -175,11 +181,16 @@ fn run_p2p(
     let (lan_shutdown_tx, lan_shutdown_rx) = tokio::sync::mpsc::channel(1);
     let (lan_tx, lan_rx) = lan.start(lan_shutdown_rx)?;
 
+    let encryption_key = base64::decode(cfg.encryption_key.clone())?;
+    let decryption_key = base64::decode(cfg.decryption_key.clone())?;
+
     let processor_cfg = ProcessorConfiguration {
         tunnel_tx: tunnel_tx,
         tunnel_rx: tunnel_rx,
         lan_tx: lan_tx,
         lan_rx: lan_rx,
+        encryption_key: encryption_key,
+        decryption_key: decryption_key,
     };
 
     let processor = Processor::new(runtime.handle().clone())?;
