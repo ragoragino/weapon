@@ -62,19 +62,11 @@ impl Processor {
                         };
 
                         match f.filter(&mut payload, PacketOrigin::LAN) {
-                            Ok(decision) => {
-                                match decision {
-                                    FilterDecision::ALLOW => {},
-                                    FilterDecision::DENY(msg) => {
-                                        debug!("Denying packet: {}", msg);
-                                        continue
-                                    },
-                                }
-                            },
-                            Err(err) => {
-                                error!("Unable to filter packet: {:?}", err);
+                            FilterDecision::ALLOW => {},
+                            FilterDecision::DENY(msg) => {
+                                debug!("Denying payload: {}", msg);
                                 continue
-                            }
+                            },
                         }
 
                         let tunnel_tx = cfg.tunnel_tx.clone();
@@ -91,19 +83,11 @@ impl Processor {
                         };
 
                         match f.filter(&mut payload, PacketOrigin::TUNNEL) {
-                            Ok(decision) => {
-                                match decision {
-                                    FilterDecision::ALLOW => {},
-                                    FilterDecision::DENY(msg) => {
-                                        debug!("Denying packet: {}", msg);
-                                        continue
-                                    },
-                                }
-                            },
-                            Err(err) => {
-                                error!("Unable to filter packet: {:?}", err);
+                            FilterDecision::ALLOW => {},
+                            FilterDecision::DENY(msg) => {
+                                debug!("Denying payload: {}", msg);
                                 continue
-                            }
+                            },
                         }
 
                         let lan_tx = cfg.lan_tx.clone();
@@ -132,18 +116,8 @@ enum FilterDecision {
     DENY(String),
 }
 
-#[derive(Debug, thiserror::Error)]
-enum FilterError {
-    #[error("{1}")]
-    UnexpectedError(#[source] Box<dyn std::error::Error>, String),
-}
-
 trait Filter {
-    fn filter(
-        &mut self,
-        payload: &mut Payload,
-        origin: PacketOrigin,
-    ) -> Result<FilterDecision, FilterError>;
+    fn filter(&mut self, payload: &mut Payload, origin: PacketOrigin) -> FilterDecision;
 }
 
 struct DebugFilter {
@@ -210,11 +184,7 @@ impl DebugFilter {
 }
 
 impl Filter for DebugFilter {
-    fn filter(
-        &mut self,
-        payload: &mut Payload,
-        origin: PacketOrigin,
-    ) -> Result<FilterDecision, FilterError> {
+    fn filter(&mut self, payload: &mut Payload, origin: PacketOrigin) -> FilterDecision {
         let is_packet = self.try_parse_layer_3(&payload.data);
         let is_frame = self.try_parse_layer_2(&payload.data);
         if !is_packet && !is_frame {
@@ -225,8 +195,14 @@ impl Filter for DebugFilter {
             return f.filter(payload, origin);
         }
 
-        Ok(FilterDecision::ALLOW)
+        FilterDecision::ALLOW
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum EncryptionError {
+    #[error("{0}")]
+    AuthenticationError(String),
 }
 
 struct NonceManager {
@@ -251,7 +227,7 @@ impl NonceManager {
         }
     }
 
-    fn mint(&mut self) -> Result<[u8; 12], FilterError> {
+    fn mint(&mut self) -> Result<[u8; 12], EncryptionError> {
         let _ = self.m.lock().unwrap();
 
         let current = self.counter;
@@ -270,7 +246,7 @@ impl NonceManager {
             .expect("unable to convert nonce to a 12-byte array"))
     }
 
-    fn verify(&mut self, nonce_bytes: &[u8; 12]) -> Result<bool, FilterError> {
+    fn verify(&mut self, nonce_bytes: &[u8; 12]) -> Result<bool, EncryptionError> {
         let _ = self.m.lock().unwrap();
 
         let nonce = u64::from_be_bytes(
@@ -289,14 +265,21 @@ impl NonceManager {
             None => 0,
         };
 
-        // This is either a replayed payload or a delyed one.
-        // We nonetheless deny it.
-        if nonce < min {
-            return Ok(false);
-        }
-
+        // We allow all payloads when we don't have window-sized payload.
+        // This allows for a possible attack - if the program crashes and then restarts,
+        // as it won't remember the payloads it has seen before the checkpoint.
+        // TODO: Having a control channel between the two tunnel endpoints would be useful
+        // as we could negotiate the new nonce based on the last checkpoint.
         if self.previous_nonces.len() == self.window {
+            // This is either a replayed payload or a delyed one.
+            // We nonetheless deny it.
+            if nonce < min {
+                return Ok(false);
+            }
+
             self.previous_nonces.remove(&min);
+
+            // TODO: Write a new checkpoint if required.
         }
 
         self.previous_nonces.insert(nonce);
@@ -316,6 +299,7 @@ struct EncryptionFilter {
 // https://crypto.stackexchange.com/questions/76365/how-does-aead-guarantee-authenticated-encryption-and-plain-aes-does-not
 // https://boringssl.googlesource.com/boringssl/+/2970779684c6f164a0e261e96a3d59f331123320/crypto/cipher/aead.h
 // https://crypto.stackexchange.com/questions/70686/how-to-prevent-accidental-nonce-reuse-with-aead-cipher
+// https://github.com/SergioBenitez/cookie-rs/blob/master/src/secure/private.rs
 impl EncryptionFilter {
     fn new(
         encrypt_key: std::vec::Vec<u8>,
@@ -337,32 +321,35 @@ impl EncryptionFilter {
 
         let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&self.encrypt_key));
         cipher.encrypt_in_place(&nonce, b"", data).map_err(|err| {
-            FilterError::UnexpectedError(Box::new(err), "unable to encrypt the payload".into())
+            ProcessorError::UnexpectedError(Box::new(err), "unable to encrypt the payload".into())
         })?;
         data.extend_from_slice(&mut nonce_bytes);
 
         Ok(())
     }
 
-    fn open(&mut self, data: &mut std::vec::Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+    fn open(&mut self, data: &mut std::vec::Vec<u8>) -> Result<(), EncryptionError> {
         if data.len() < 12 {
-            // TODO: Return error
+            return Err(EncryptionError::AuthenticationError("payload missing nonce".into()));
         }
 
         let nonce_start = data.len() - 12;
         let nonce = Nonce::clone_from_slice(&data[nonce_start..]);
         data.truncate(nonce_start);
 
-        self.nonce_manager.verify(
+        let is_nonce_valid = self.nonce_manager.verify(
             nonce
                 .as_slice()
                 .try_into()
                 .expect("nonce doesn't have the correct length"),
         )?;
+        if !is_nonce_valid {
+            return Err(EncryptionError::AuthenticationError("invalid nonce".into()));
+        }
 
         let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&self.decrypt_key));
         cipher.decrypt_in_place(&nonce, b"", data).map_err(|err| {
-            FilterError::UnexpectedError(Box::new(err), "unable to decrypt the payload".into())
+            EncryptionError::AuthenticationError(format!("unable to decrypt the payload: {}", err))
         })?;
 
         Ok(())
@@ -370,21 +357,29 @@ impl EncryptionFilter {
 }
 
 impl Filter for EncryptionFilter {
-    fn filter(
-        &mut self,
-        payload: &mut Payload,
-        origin: PacketOrigin,
-    ) -> Result<FilterDecision, FilterError> {
+    fn filter(&mut self, payload: &mut Payload, origin: PacketOrigin) -> FilterDecision {
         match origin {
             PacketOrigin::TUNNEL => {
-                self.seal(&mut payload.data).map_err(|err| {
-                    FilterError::UnexpectedError(err, "unable to decrypt the payload".into())
-                })?;
+                match self.seal(&mut payload.data) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return FilterDecision::DENY(format!(
+                            "unable to seal the payload: {:?}",
+                            err
+                        ))
+                    }
+                };
             }
             PacketOrigin::LAN => {
-                self.open(&mut payload.data).map_err(|err| {
-                    FilterError::UnexpectedError(err, "unable to encrypt the payload".into())
-                })?;
+                match self.open(&mut payload.data) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return FilterDecision::DENY(format!(
+                            "unable to open the payload: {:?}",
+                            err
+                        ))
+                    }
+                };
             }
         }
 
@@ -392,7 +387,7 @@ impl Filter for EncryptionFilter {
             return f.filter(payload, origin);
         }
 
-        Ok(FilterDecision::ALLOW)
+        FilterDecision::ALLOW
     }
 }
 
@@ -403,7 +398,7 @@ mod tests {
     use rand::{RngCore, SeedableRng};
 
     #[test]
-    fn test_encryption_filter() {
+    fn test_encryption_filter_success() {
         let mut r = StdRng::seed_from_u64(42);
 
         let mut encryption_key = vec![0; 32];
@@ -421,4 +416,54 @@ mod tests {
         f.open(&mut payload).expect("unable to open the payload");
         assert_eq!(expected_payload, payload);
     }
+
+    #[test]
+    fn test_encryption_filter_tampering() {
+        let mut r = StdRng::seed_from_u64(42);
+
+        let mut encryption_key = vec![0; 32];
+        r.fill_bytes(&mut encryption_key);
+        let decryption_key = encryption_key.clone();
+
+        let mut f = EncryptionFilter::new(encryption_key, decryption_key, None);
+
+        let mut payload = vec![72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100];
+        let expected_payload = payload.clone();
+
+        f.seal(&mut payload).expect("unable to seal the payload");
+        assert_ne!(expected_payload, payload);
+
+        payload[5] = 38;
+        match f.open(&mut payload) {
+            Ok(_) => assert!(false, "expected an error"),
+            Err(err) => assert!(true, "received an error: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_encryption_filter_replay() {
+        let mut r = StdRng::seed_from_u64(42);
+
+        let mut encryption_key = vec![0; 32];
+        r.fill_bytes(&mut encryption_key);
+        let decryption_key = encryption_key.clone();
+
+        let mut f = EncryptionFilter::new(encryption_key, decryption_key, None);
+
+        let mut payload = vec![72, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100];
+        let expected_payload = payload.clone();
+
+        f.seal(&mut payload).expect("unable to seal the payload");
+        let mut replay_payload = payload.clone();
+
+        f.open(&mut payload).expect("unable to open the payload");
+        assert_eq!(expected_payload, payload);
+
+        match f.open(&mut replay_payload) {
+            Ok(_) => assert!(false, "expected an error"),
+            Err(err) => assert!(true, "received an error: {:?}", err),
+        }
+    }
+
+    // TODO: Test checkpoints
 }

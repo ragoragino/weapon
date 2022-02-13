@@ -15,7 +15,6 @@ use processor::*;
 
 // TODO: Think about how to create networks to use
 // TODO: Debug IPv4/IPv6 packets from TAP device
-// TODO: Encryption
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -42,8 +41,8 @@ struct P2PConfiguration {
     tunnel_cfg: TunnelConfiguration,
     #[serde(rename = "lan_configuration")]
     lan_cfg: LanConfiguration,
-    encryption_key: std::vec::Vec::<u8>,
-    decryption_key: std::vec::Vec::<u8>,
+    encryption_key: std::vec::Vec<u8>,
+    decryption_key: std::vec::Vec<u8>,
 }
 
 #[derive(Debug, Deserialize)]
