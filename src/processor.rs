@@ -260,17 +260,17 @@ impl NonceManager {
             return Ok(false);
         }
 
-        let min = match self.previous_nonces.iter().next() {
-            Some(i) => *i,
-            None => 0,
-        };
-
         // We allow all payloads when we don't have window-sized payload.
         // This allows for a possible attack - if the program crashes and then restarts,
         // as it won't remember the payloads it has seen before the checkpoint.
         // TODO: Having a control channel between the two tunnel endpoints would be useful
         // as we could negotiate the new nonce based on the last checkpoint.
         if self.previous_nonces.len() == self.window {
+            let min = match self.previous_nonces.iter().next() {
+                Some(i) => *i,
+                None => 0,
+            };
+
             // This is either a replayed payload or a delyed one.
             // We nonetheless deny it.
             if nonce < min {
@@ -360,7 +360,7 @@ impl Filter for EncryptionFilter {
     fn filter(&mut self, payload: &mut Payload, origin: PacketOrigin) -> FilterDecision {
         match origin {
             PacketOrigin::TUNNEL => {
-                match self.seal(&mut payload.data) {
+                match self.open(&mut payload.data) {
                     Ok(_) => {}
                     Err(err) => {
                         return FilterDecision::DENY(format!(
@@ -371,7 +371,7 @@ impl Filter for EncryptionFilter {
                 };
             }
             PacketOrigin::LAN => {
-                match self.open(&mut payload.data) {
+                match self.seal(&mut payload.data) {
                     Ok(_) => {}
                     Err(err) => {
                         return FilterDecision::DENY(format!(

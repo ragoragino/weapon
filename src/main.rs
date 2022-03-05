@@ -17,21 +17,6 @@ use processor::*;
 // TODO: Debug IPv4/IPv6 packets from TAP device
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Mode {
-    ClientServer,
-    P2P,
-}
-
-#[derive(Debug, Deserialize)]
-struct ClientServerConfiguration {
-    #[serde(skip)]
-    uid: u32,
-    #[serde(skip)]
-    gid: u32,
-}
-
-#[derive(Debug, Deserialize)]
 struct P2PConfiguration {
     #[serde(skip)]
     uid: u32,
@@ -41,17 +26,14 @@ struct P2PConfiguration {
     tunnel_cfg: TunnelConfiguration,
     #[serde(rename = "lan_configuration")]
     lan_cfg: LanConfiguration,
-    encryption_key: std::vec::Vec<u8>,
-    decryption_key: std::vec::Vec<u8>,
+    encryption_key: String,
+    decryption_key: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct Configuration {
     uid: u32,
     gid: u32,
-    mode: Mode,
-    #[serde(rename = "client_server_configuration")]
-    client_server_cfg: Option<ClientServerConfiguration>,
     #[serde(rename = "p2p_configuration")]
     p2p_cfg: Option<P2PConfiguration>,
 }
@@ -70,10 +52,9 @@ fn main() {
     let cfg_json = r#"{
         "uid": 1000,
         "gid": 1000,
-        "mode": "p2p",
         "p2p_configuration": {
-            "encryption_key": "QIwGo0RaPct0RJAyg6oSjjQ6L+04eBWKtDhTjmfSlPjOWn6IU3R/RAAqcUYAwXz+g102IxrpQMy/GYZOHdsEeGUJkixcrhrLNJ0hZZ4lPXOTEYoecVQdeyqm69s/f2BE2PX4aIRwxGTMDaKo2Ddym1hkZoWGPFFZYT16/U0KmSDYn4nN9RLvyZ7AzOBc2l5LnIQlQqojNeUQFgnK9PDw/bkXAcuWZJdZZc45tK2V/+nqVKVOgTmUhppiUEVE3Wi67uClN9PFyEyIRXw1N0GhMVuHpfa+xeisTMzEH9oYilme9lfS1IRu5WJWzB7ZXvgDWJx2sxcB5qTZABsJ8F0sFA==",
-            "decryption_key": "ti2dX22g5X1wSLEw7VKf+hRblLWsL9EAApdE7KzqTVtWgU5KSl8/vNe7v9oghMsU/iQzxMyFe3l4MsDRIKmTAzn0ePw1AQsx49PZfOkqRV8jg/s8sJByF7bd/JRDMSz4uwNbeC1AQ6Scqxs55aK7EVsABHDL7LQF6orspj8+CrYsCU7imigohKhCtiZN9QMfB5loa6isIThzW1Ep09Syv2n5T3H39yr1cmKHoUgZndafOMvZGIYos6m2y+fZarVeeWakbHwqzW5BZRiuw+uvybokDPy4iKl6hH9l+GrUsQGCLZyWGAXkbdPeFmdIC5OCh4JFzZSG355KSHmCLOavBQ==",
+            "encryption_key": "K19Zve3fiOdbW+6z1Mh70XjaVw5maJFps0aLwMVrYIE=",
+            "decryption_key": "fbapi8HbKIFjnUg98W+AAKau0/zIHdW4Hh156EJTijs=",
             "tunnel_configuration": {
                 "mode": "listener",
                 "protocol": "UDP",
@@ -84,7 +65,7 @@ fn main() {
             "lan_configuration": {
                 "buffer_size": 1000,
                 "device_configuration": {
-                    "device_type": "TAP",
+                    "device_type": "TUN",
                     "address": "10.0.0.0",
                     "destination": "10.0.1.0",
                     "netmask": "255.255.255.0"
@@ -104,46 +85,21 @@ fn main() {
     .expect("Error setting Ctrl-C handler");
 
     // Start VPN.
-    match cfg.mode {
-        Mode::ClientServer => {
-            let mut client_server_cfg = match cfg.client_server_cfg {
-                Some(cfg) => cfg,
-                None => {
-                    panic!("Client-server configuration missing");
-                }
-            };
-
-            client_server_cfg.uid = cfg.uid;
-            client_server_cfg.gid = cfg.gid;
-            run_client_server(shutdown_rx, &client_server_cfg)
-                .expect("Unable to run VPN in ClientServer mode.");
+    let mut p2p_cfg = match cfg.p2p_cfg {
+        Some(cfg) => cfg,
+        None => {
+            panic!("P2P configuration missing");
         }
-        Mode::P2P => {
-            let mut p2p_cfg = match cfg.p2p_cfg {
-                Some(cfg) => cfg,
-                None => {
-                    panic!("P2P configuration missing");
-                }
-            };
+    };
 
-            p2p_cfg.uid = cfg.uid;
-            p2p_cfg.gid = cfg.gid;
-            run_p2p(shutdown_rx, &p2p_cfg).expect("Unable to run VPN in P2P mode.");
-        }
-    }
+    p2p_cfg.uid = cfg.uid;
+    p2p_cfg.gid = cfg.gid;
+    run_p2p(shutdown_rx, &p2p_cfg).expect("Unable to run VPN in P2P mode.");
 }
 
 fn parse_config(json: &str) -> Result<Configuration, Box<dyn std::error::Error>> {
     let cfg: Configuration = serde_json::from_str(json)?;
     Ok(cfg)
-}
-
-fn run_client_server(
-    _shutdown_rx: tokio::sync::mpsc::Receiver<()>,
-    _cfg: &ClientServerConfiguration,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO
-    Ok(())
 }
 
 fn run_p2p(
@@ -180,8 +136,8 @@ fn run_p2p(
     let (lan_shutdown_tx, lan_shutdown_rx) = tokio::sync::mpsc::channel(1);
     let (lan_tx, lan_rx) = lan.start(lan_shutdown_rx)?;
 
-    let encryption_key = base64::decode(cfg.encryption_key.clone())?;
-    let decryption_key = base64::decode(cfg.decryption_key.clone())?;
+    let encryption_key = base64::decode(&cfg.encryption_key)?;
+    let decryption_key = base64::decode(&cfg.decryption_key)?;
 
     let processor_cfg = ProcessorConfiguration {
         tunnel_tx: tunnel_tx,
