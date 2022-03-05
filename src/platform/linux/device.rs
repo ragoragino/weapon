@@ -65,6 +65,10 @@ impl Device {
             req.ifru.flags |= IFF_UP | IFF_RUNNING;
             siocsifflags(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
 
+            // Set MTU.
+            req.ifru.mtu = cfg.mtu;
+            siocsifmtu(sock, &req).map_err(|_| std::io::Error::last_os_error())?;
+
             // Set address.
             req.ifru.addr = ipaddr_to_sockaddr(cfg.address)?;
             siocsifaddr(sock, &req).map_err(|_| std::io::Error::last_os_error())?;

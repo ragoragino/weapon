@@ -12,4 +12,5 @@ pub struct DeviceConfiguration {
     pub address: std::net::IpAddr,
     pub netmask: std::net::IpAddr,
     pub destination: std::net::IpAddr,
+    pub mtu: i32,
 }

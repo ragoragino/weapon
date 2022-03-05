@@ -68,7 +68,8 @@ fn main() {
                     "device_type": "TUN",
                     "address": "10.0.0.0",
                     "destination": "10.0.1.0",
-                    "netmask": "255.255.255.0"
+                    "netmask": "255.255.255.0",
+                    "mtu": 1472
                 }
             }
         }

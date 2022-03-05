@@ -12,6 +12,7 @@ pub const SIOCSIFFLAGS: c_ulong = 0x8914;
 pub const SIOCSIFADDR: c_ulong = 0x8916;
 pub const SIOCSIFNETMASK: c_ulong = 0x891c;
 pub const SIOCADDRT: c_ulong = 0x890B;
+pub const SIOCSIFMTU: c_ulong = 0x8922;
 
 pub const IFF_TUN: c_short = 0x0001;
 pub const IFF_TAP: c_short = 0x0002;
@@ -91,6 +92,7 @@ ioctl_write_ptr_bad!(siocgifflags, SIOCGIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifflags, SIOCSIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifaddr, SIOCSIFADDR, ifreq);
 ioctl_write_ptr_bad!(siocsifnetmask, SIOCSIFNETMASK, ifreq);
+ioctl_write_ptr_bad!(siocsifmtu, SIOCSIFMTU, ifreq);	
 
 /* This structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
 #[repr(C)]
