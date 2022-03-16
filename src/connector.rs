@@ -42,8 +42,6 @@ pub struct LanConfiguration {
 pub enum ConnectorError {
     #[error(transparent)]
     IOError(#[from] std::io::Error),
-    #[error("{1}")]
-    UnexpectedError(#[source] Box<dyn std::error::Error>, String),
 }
 
 pub trait Connector {
@@ -125,7 +123,9 @@ impl Connector for UDPConnector {
 
                         let in_tx = in_tx.clone();
                         runtime.spawn(async move {
-                            in_tx.send(payload).await;
+                            if let Err(_) = in_tx.send(payload).await {
+                                error!("Failed sending payload to in_tx.");
+                            }
                         });
                     },
                     payload_opt = out_rx.recv() => {
@@ -140,7 +140,9 @@ impl Connector for UDPConnector {
 
                         let socket = socket.clone();
                         runtime.spawn(async move {
-                            socket.send(&payload.data).await;
+                            if let Err(err) = socket.send(&payload.data).await {
+                                error!("Failed sending payload to socket: {:?}", err);
+                            }
                         });
                     },
                     _ = shutdown_rx.recv() => {
@@ -243,7 +245,9 @@ impl Connector for TUNTAPConnector {
 
                         let in_tx = in_tx.clone();
                         runtime.spawn(async move {
-                            in_tx.send(payload).await;
+                            if let Err(_) = in_tx.send(payload).await {
+                                error!("Failed sending payload to in_tx.");
+                            }
                         });
                     },
                     payload_opt = out_rx.recv() => {
@@ -258,7 +262,9 @@ impl Connector for TUNTAPConnector {
 
                         let device = device.clone();
                         runtime.spawn(async move {
-                            device.write(&mut payload.data).await;
+                            if let Err(err) = device.write(&mut payload.data).await{
+                                error!("Failed sending payload to a device: {:?}", err);
+                            }
                         });
                     },
                     _ = shutdown_rx.recv() => {

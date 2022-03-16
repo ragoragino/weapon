@@ -43,12 +43,12 @@ impl Processor {
     ) -> Result<(), ProcessorError> {
         let runtime = self.runtime.clone();
 
-        let encryption_filter = Box::new(EncryptionFilter::new(
-            cfg.encryption_key,
-            cfg.decryption_key,
-            None,
-        ));
-        let mut f = DebugFilter::new(Some(encryption_filter));
+        // let encryption_filter = Box::new(EncryptionFilter::new(
+        //     cfg.encryption_key,
+        //     cfg.decryption_key,
+        //     None,
+        // ));
+        let mut f = DebugFilter::new(None);
 
         self.runtime.spawn(async move {
             loop {
@@ -71,7 +71,9 @@ impl Processor {
 
                         let tunnel_tx = cfg.tunnel_tx.clone();
                         runtime.spawn(async move {
-                            tunnel_tx.send(payload).await;
+                            if let Err(_) = tunnel_tx.send(payload).await {
+                                error!("Unable to send to tunnel.");
+                            }
                         });
                     },
                     payload_opt = cfg.tunnel_rx.recv() => {
@@ -92,7 +94,9 @@ impl Processor {
 
                         let lan_tx = cfg.lan_tx.clone();
                         runtime.spawn(async move {
-                            lan_tx.send(payload).await;
+                            if let Err(_) = lan_tx.send(payload).await {
+                                error!("Unable to send to LAN.");
+                            }
                         });
                     },
                     _ = shutdown_rx.recv() => {
@@ -330,7 +334,9 @@ impl EncryptionFilter {
 
     fn open(&mut self, data: &mut std::vec::Vec<u8>) -> Result<(), EncryptionError> {
         if data.len() < 12 {
-            return Err(EncryptionError::AuthenticationError("payload missing nonce".into()));
+            return Err(EncryptionError::AuthenticationError(
+                "payload missing nonce".into(),
+            ));
         }
 
         let nonce_start = data.len() - 12;

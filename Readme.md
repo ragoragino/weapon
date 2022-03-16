@@ -10,3 +10,15 @@ https://openvpn.net/vpn-server-resources/site-to-site-routing-explained-in-detai
 
 https://www.gabriel.urdhr.fr/2021/05/08/tuntap/
 https://www.kernel.org/doc/Documentation/networking/tuntap.txt
+
+Setting up docker networks:
+
+``` 
+// docker.json
+{
+  "default-address-pools":
+  [
+    {"base":"172.18.0.0/16","size":24}
+  ]
+}
+```

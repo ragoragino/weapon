@@ -92,7 +92,7 @@ ioctl_write_ptr_bad!(siocgifflags, SIOCGIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifflags, SIOCSIFFLAGS, ifreq);
 ioctl_write_ptr_bad!(siocsifaddr, SIOCSIFADDR, ifreq);
 ioctl_write_ptr_bad!(siocsifnetmask, SIOCSIFNETMASK, ifreq);
-ioctl_write_ptr_bad!(siocsifmtu, SIOCSIFMTU, ifreq);	
+ioctl_write_ptr_bad!(siocsifmtu, SIOCSIFMTU, ifreq);
 
 /* This structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
 #[repr(C)]

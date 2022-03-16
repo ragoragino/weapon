@@ -13,7 +13,6 @@ use connector::*;
 use platform::*;
 use processor::*;
 
-// TODO: Think about how to create networks to use
 // TODO: Debug IPv4/IPv6 packets from TAP device
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +80,9 @@ fn main() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
 
     ctrlc::set_handler(move || {
-        shutdown_tx.blocking_send(());
+        shutdown_tx
+            .blocking_send(())
+            .expect("unable to send to shutdown channel");
     })
     .expect("Error setting Ctrl-C handler");
 
