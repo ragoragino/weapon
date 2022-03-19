@@ -58,16 +58,16 @@ fn main() {
                 "mode": "listener",
                 "protocol": "UDP",
                 "address": "0.0.0.0:9000",
-                "peer_address": "192.168.0.1:9000",
+                "peer_address": "192.168.1.113:9000",
                 "buffer_size": 1000
             },
             "lan_configuration": {
                 "buffer_size": 1000,
                 "device_configuration": {
                     "device_type": "TUN",
-                    "address": "10.0.0.0",
-                    "destination": "10.0.1.0",
-                    "netmask": "255.255.255.0",
+                    "address": "172.16.0.0",
+                    "destination": "172.18.0.0",
+                    "netmask": "255.254.0.0",
                     "mtu": 1472
                 }
             }

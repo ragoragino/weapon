@@ -43,12 +43,12 @@ impl Processor {
     ) -> Result<(), ProcessorError> {
         let runtime = self.runtime.clone();
 
-        // let encryption_filter = Box::new(EncryptionFilter::new(
-        //     cfg.encryption_key,
-        //     cfg.decryption_key,
-        //     None,
-        // ));
-        let mut f = DebugFilter::new(None);
+        let encryption_filter = Box::new(EncryptionFilter::new(
+            cfg.encryption_key,
+            cfg.decryption_key,
+            None,
+        ));
+        let mut f = DebugFilter::new(Some(encryption_filter));
 
         self.runtime.spawn(async move {
             loop {
@@ -370,7 +370,7 @@ impl Filter for EncryptionFilter {
                     Ok(_) => {}
                     Err(err) => {
                         return FilterDecision::DENY(format!(
-                            "unable to seal the payload: {:?}",
+                            "unable to open the payload: {:?}",
                             err
                         ))
                     }
@@ -381,7 +381,7 @@ impl Filter for EncryptionFilter {
                     Ok(_) => {}
                     Err(err) => {
                         return FilterDecision::DENY(format!(
-                            "unable to open the payload: {:?}",
+                            "unable to seal the payload: {:?}",
                             err
                         ))
                     }
