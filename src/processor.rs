@@ -133,7 +133,7 @@ impl DebugFilter {
         return DebugFilter { next: next };
     }
 
-    fn try_parse_layer_3(&self, data: &[u8]) -> bool {
+    fn try_parse_inet(&self, data: &[u8]) -> bool {
         let header = match Ipv4HeaderSlice::from_slice(data) {
             Ok(header) => header,
             Err(_) => {
@@ -153,7 +153,7 @@ impl DebugFilter {
         true
     }
 
-    fn try_parse_layer_2(&self, data: &[u8]) -> bool {
+    fn try_parse_ethernet(&self, data: &[u8]) -> bool {
         let header = match Ethernet2HeaderSlice::from_slice(data) {
             Ok(header) => header,
             Err(_) => {
@@ -176,7 +176,7 @@ impl DebugFilter {
         let layer_3_data_start = 14;
         let layer_3_data_end = data.len() - 4;
         let l3_layer_data = &data[layer_3_data_start..layer_3_data_end];
-        if !self.try_parse_layer_3(&l3_layer_data) {
+        if !self.try_parse_inet(&l3_layer_data) {
             debug!(
                 "Frame received from: {:?}, destined to: {:?}, ether_type: {:?}",
                 source_addr, dest_addr, ether_type_enum
@@ -189,10 +189,10 @@ impl DebugFilter {
 
 impl Filter for DebugFilter {
     fn filter(&mut self, payload: &mut Payload, origin: PacketOrigin) -> FilterDecision {
-        let is_packet = self.try_parse_layer_3(&payload.data);
-        let is_frame = self.try_parse_layer_2(&payload.data);
-        if !is_packet && !is_frame {
-            debug!("Received payload is not a Layer 2 or a Layer 3 payload!")
+        let is_inet = self.try_parse_inet(&payload.data);
+        let is_eth = self.try_parse_ethernet(&payload.data);
+        if !is_inet && !is_eth {
+            debug!("Received payload is not an IPv4 packet or an Ethernet frame!")
         }
 
         if let Some(f) = &mut self.next {

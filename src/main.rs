@@ -2,6 +2,7 @@ use env_logger::Env;
 use libc::{setgid, setuid};
 use serde::Deserialize;
 use std::sync::Arc;
+use std::default::Default;
 use tokio;
 
 mod connector;
@@ -13,14 +14,20 @@ use connector::*;
 use platform::*;
 use processor::*;
 
-// TODO: Debug IPv4/IPv6 packets from TAP device
+// TODO: Debug IPv4/IPv6 packets from TAP device. Debug why TAP is not working.
+// TODO: Finish crypto.
+
+#[derive(Debug, Deserialize, Default)]
+struct CommonConfiguration {
+    uid: u32,
+    gid: u32,
+    worker_threads: usize,
+}
 
 #[derive(Debug, Deserialize)]
 struct P2PConfiguration {
-    #[serde(skip)]
-    uid: u32,
-    #[serde(skip)]
-    gid: u32,
+    #[serde(skip_deserializing)]
+    general: CommonConfiguration,
     #[serde(rename = "tunnel_configuration")]
     tunnel_cfg: TunnelConfiguration,
     #[serde(rename = "lan_configuration")]
@@ -31,8 +38,8 @@ struct P2PConfiguration {
 
 #[derive(Debug, Deserialize)]
 struct Configuration {
-    uid: u32,
-    gid: u32,
+    #[serde(flatten)]
+    general: CommonConfiguration,
     #[serde(rename = "p2p_configuration")]
     p2p_cfg: Option<P2PConfiguration>,
 }
@@ -48,9 +55,11 @@ fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     // Parse configuration.
+    // TODO: Load keys from a secret store.
     let cfg_json = r#"{
         "uid": 1000,
         "gid": 1000,
+        "worker_threads": 4,
         "p2p_configuration": {
             "encryption_key": "K19Zve3fiOdbW+6z1Mh70XjaVw5maJFps0aLwMVrYIE=",
             "decryption_key": "fbapi8HbKIFjnUg98W+AAKau0/zIHdW4Hh156EJTijs=",
@@ -74,7 +83,7 @@ fn main() {
         }
     }"#;
 
-    let cfg = parse_config(&cfg_json).expect("Failed parsing configuration");
+    let cfg = parse_config(&cfg_json).expect("failed parsing configuration");
 
     // Prepare signal handlers.
     let (shutdown_tx, shutdown_rx) = tokio::sync::mpsc::channel(1);
@@ -84,7 +93,7 @@ fn main() {
             .blocking_send(())
             .expect("unable to send to shutdown channel");
     })
-    .expect("Error setting Ctrl-C handler");
+    .expect("error setting Ctrl-C handler");
 
     // Start VPN.
     let mut p2p_cfg = match cfg.p2p_cfg {
@@ -94,9 +103,8 @@ fn main() {
         }
     };
 
-    p2p_cfg.uid = cfg.uid;
-    p2p_cfg.gid = cfg.gid;
-    run_p2p(shutdown_rx, &p2p_cfg).expect("Unable to run VPN in P2P mode.");
+    p2p_cfg.general = cfg.general;
+    run_p2p(shutdown_rx, &p2p_cfg).expect("unable to run VPN in P2P mode");
 }
 
 fn parse_config(json: &str) -> Result<Configuration, Box<dyn std::error::Error>> {
@@ -110,7 +118,7 @@ fn run_p2p(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
-        .worker_threads(4)
+        .worker_threads(cfg.general.worker_threads)
         .build()?;
 
     let tunnel = match cfg.tunnel_cfg.protocol {
@@ -154,7 +162,7 @@ fn run_p2p(
     let (processor_shutdown_tx, processor_shutdown_rx) = tokio::sync::mpsc::channel(1);
     processor.start(processor_shutdown_rx, processor_cfg)?;
 
-    drop_priviliges(cfg.uid, cfg.gid)?;
+    drop_priviliges(cfg.general.uid, cfg.general.gid)?;
 
     // Wait for the interrupt signal.
     shutdown_rx.blocking_recv();

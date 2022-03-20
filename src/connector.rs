@@ -180,7 +180,7 @@ impl Connector for TCPConnector {
         let (_in_tx, in_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
         let (out_tx, _out_rx) = tokio::sync::mpsc::channel(self.cfg.buffer_size);
 
-        // TODO
+        // TODO: Implement.
         Ok((out_tx, in_rx))
     }
 }
@@ -231,7 +231,6 @@ impl Connector for TUNTAPConnector {
                         let len = match result {
                             Ok(len) => len,
                             Err(err) => {
-                                // TODO: Improve handling here.
                                 error!("Failed receiving from device: {}", err);
                                 continue;
                             }
