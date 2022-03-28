@@ -10,7 +10,7 @@ If running across two Docker subnets, change the default subnet for Docker on re
 {
   "default-address-pools":
   [
-    {"base":"172.18.0.0/16","size":24}
+    {"base":"172.18.0.0/16","size": 16}
   ]
 }
 ```

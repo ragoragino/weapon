@@ -15,7 +15,7 @@ use platform::*;
 use processor::*;
 
 // TODO: Debug IPv4/IPv6 packets from TAP device. Debug why TAP is not working.
-// TODO: Finish crypto.
+// TODO: Possibly add checkpoint and control channel to crypto.
 
 #[derive(Debug, Deserialize, Default)]
 struct CommonConfiguration {
